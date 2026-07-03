@@ -1,0 +1,1019 @@
+---
+
+title: "Why Activation Functions Are Needed"
+description: "Understanding how a small non-linear operation lets stacked weighted sums learn more flexible patterns."
+format:
+    html:
+        toc: true
+        toc-depth: 2
+        code-fold: true
+        code-summary: "Show code"
+jupyter: python3
+---
+
+The previous chapter ended with a missing piece.
+
+Stacking weighted sums does not create a more flexible model by itself.
+
+Something has to happen between those weighted sums.
+
+That missing operation is called an **activation function**.
+
+---
+
+## What an activation function does
+
+A weighted sum creates a score.
+
+```text
+score = w1x1 + w2x2 + b
+```
+
+An activation function takes that score and changes it before the next calculation step.
+
+```text
+output = activation(score)
+```
+
+The important part is not the name.
+
+The important part is the effect.
+
+A weighted sum gives a straight-line calculation.
+
+An activation function adds a non-linear change.
+
+That non-linear change is what allows a model to build patterns that are not just straight lines.
+
+In simple terms:
+
+```text
+weighted sum → score
+activation   → transformed score
+```
+
+Or:
+
+```text
+weighted sum gives direction
+activation adds shape
+```
+
+---
+
+## Same score, different activation
+
+The same score can produce very different outputs depending on the activation function.
+
+For example, suppose the weighted score is:
+
+```text
+score = 2
+```
+
+Different activations transform it differently:
+
+```text
+Step(2)    = 1
+Sigmoid(2) ≈ 0.88
+Tanh(2)    ≈ 0.96
+ReLU(2)    = 2
+```
+
+Now try changing the score below.
+
+Watch how each activation responds.
+
+```{=html}
+<div id="activation-shape-sandbox" class="activation-sandbox">
+  <div class="activation-row activation-top-row">
+    <div class="activation-segmented-control" aria-label="Activation selector">
+      <button id="activation-step-button" type="button">Step</button>
+      <button id="activation-sigmoid-button" type="button" class="active">Sigmoid</button>
+      <button id="activation-tanh-button" type="button">Tanh</button>
+      <button id="activation-relu-button" type="button">ReLU</button>
+    </div>
+    <div id="activation-output-badge" class="activation-metric-badge">Output: --</div>
+  </div>
+
+  <canvas id="activation-canvas" width="720" height="420" class="activation-canvas"></canvas>
+
+  <div class="activation-slider-grid">
+    <label>score: <span id="activation-score-value"></span>
+      <input id="activation-score-slider" type="range" min="-6" max="6" step="0.1" value="0">
+    </label>
+  </div>
+
+  <div id="activation-equation" class="activation-equation-box"></div>
+  <p id="activation-note" class="activation-note"></p>
+</div>
+
+<style>
+.activation-sandbox {
+  max-width: 820px;
+  margin: 1.5rem 0;
+  padding: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.activation-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.activation-top-row {
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.activation-segmented-control {
+  display: inline-flex;
+  border: 1px solid #aaa;
+  border-radius: 999px;
+  overflow: hidden;
+  flex-wrap: wrap;
+}
+
+.activation-segmented-control button {
+  padding: 0.5rem 0.9rem;
+  border: 0;
+  background: #fff;
+  color: #222;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.activation-segmented-control button.active {
+  background: #222;
+  color: #fff;
+}
+
+.activation-metric-badge {
+  font-weight: 700;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  background: #f3f3f3;
+}
+
+.activation-canvas {
+  width: 100%;
+  max-width: 720px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  display: block;
+  background: #fff;
+}
+
+.activation-slider-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+}
+
+.activation-slider-grid label {
+  font-size: 0.95rem;
+}
+
+.activation-slider-grid input {
+  width: 100%;
+}
+
+.activation-equation-box {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border-radius: 10px;
+  background: #f7f7f7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-x: auto;
+}
+
+.activation-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.95rem;
+}
+</style>
+
+<script>
+(function () {
+  const canvas = document.getElementById("activation-canvas");
+  const ctx = canvas.getContext("2d");
+
+  const scoreSlider = document.getElementById("activation-score-slider");
+  const scoreValue = document.getElementById("activation-score-value");
+  const outputBadge = document.getElementById("activation-output-badge");
+  const equationBox = document.getElementById("activation-equation");
+  const note = document.getElementById("activation-note");
+
+  const buttons = {
+    step: document.getElementById("activation-step-button"),
+    sigmoid: document.getElementById("activation-sigmoid-button"),
+    tanh: document.getElementById("activation-tanh-button"),
+    relu: document.getElementById("activation-relu-button")
+  };
+
+  const width = canvas.width;
+  const height = canvas.height;
+
+  const xMin = -6;
+  const xMax = 6;
+  const yMin = -1.5;
+  const yMax = 6;
+
+  let selectedActivation = "sigmoid";
+
+  function step(x) {
+    return x >= 0 ? 1 : 0;
+  }
+
+  function sigmoid(x) {
+    return 1 / (1 + Math.exp(-x));
+  }
+
+  function tanh(x) {
+    return Math.tanh(x);
+  }
+
+  function relu(x) {
+    return Math.max(0, x);
+  }
+
+  function activate(x) {
+    if (selectedActivation === "step") return step(x);
+    if (selectedActivation === "sigmoid") return sigmoid(x);
+    if (selectedActivation === "tanh") return tanh(x);
+    return relu(x);
+  }
+
+  function toCanvasX(x) {
+    return ((x - xMin) / (xMax - xMin)) * width;
+  }
+
+  function toCanvasY(y) {
+    return height - ((y - yMin) / (yMax - yMin)) * height;
+  }
+
+  function drawAxes() {
+    ctx.strokeStyle = "#aaa";
+    ctx.lineWidth = 1;
+
+    const zeroX = toCanvasX(0);
+    const zeroY = toCanvasY(0);
+
+    ctx.beginPath();
+    ctx.moveTo(0, zeroY);
+    ctx.lineTo(width, zeroY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(zeroX, 0);
+    ctx.lineTo(zeroX, height);
+    ctx.stroke();
+
+    ctx.fillStyle = "#666";
+    ctx.font = "12px sans-serif";
+
+    for (let x = -6; x <= 6; x += 2) {
+      const px = toCanvasX(x);
+      ctx.fillRect(px, zeroY - 4, 1, 8);
+      ctx.fillText(String(x), px - 6, zeroY + 18);
+    }
+
+    for (let y = -1; y <= 6; y += 1) {
+      const py = toCanvasY(y);
+      ctx.fillRect(zeroX - 4, py, 8, 1);
+      if (y !== 0) {
+        ctx.fillText(String(y), zeroX + 8, py + 4);
+      }
+    }
+
+    ctx.fillText("score", width - 45, zeroY - 8);
+    ctx.fillText("output", zeroX + 8, 14);
+  }
+
+  function drawCurve() {
+    ctx.strokeStyle = "#222";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+
+    for (let i = 0; i <= 600; i++) {
+      const x = xMin + (i / 600) * (xMax - xMin);
+      const y = activate(x);
+      const px = toCanvasX(x);
+      const py = toCanvasY(y);
+
+      if (i === 0) {
+        ctx.moveTo(px, py);
+      } else {
+        ctx.lineTo(px, py);
+      }
+    }
+
+    ctx.stroke();
+  }
+
+  function drawSelectedPoint(score, output) {
+    const px = toCanvasX(score);
+    const py = toCanvasY(output);
+
+    ctx.setLineDash([6, 5]);
+    ctx.strokeStyle = "#777";
+    ctx.lineWidth = 1.5;
+
+    ctx.beginPath();
+    ctx.moveTo(px, toCanvasY(0));
+    ctx.lineTo(px, py);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(toCanvasX(0), py);
+    ctx.lineTo(px, py);
+    ctx.stroke();
+
+    ctx.setLineDash([]);
+
+    ctx.beginPath();
+    ctx.arc(px, py, 7, 0, Math.PI * 2);
+    ctx.fillStyle = "#4f6fff";
+    ctx.fill();
+    ctx.strokeStyle = "#222";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  function updateButtons() {
+    Object.keys(buttons).forEach(function (name) {
+      buttons[name].classList.toggle("active", name === selectedActivation);
+    });
+  }
+
+  function updateText(score, output) {
+    const roundedScore = score.toFixed(1);
+    const roundedOutput = output.toFixed(3);
+
+    scoreValue.textContent = roundedScore;
+    outputBadge.textContent = "Output: " + roundedOutput;
+
+    if (selectedActivation === "step") {
+      equationBox.textContent = "output = Step(score) = score >= 0 ? 1 : 0";
+      note.textContent = "Step gives a hard jump. It is easy to understand, but too abrupt for smooth learning.";
+    } else if (selectedActivation === "sigmoid") {
+      equationBox.textContent = "output = Sigmoid(score) = 1 / (1 + e^(-score))";
+      note.textContent = "Sigmoid squeezes any score into a value between 0 and 1. It is useful when the final answer should look like a probability.";
+    } else if (selectedActivation === "tanh") {
+      equationBox.textContent = "output = Tanh(score)";
+      note.textContent = "Tanh squeezes values between -1 and 1. Unlike sigmoid, it keeps negative and positive directions.";
+    } else {
+      equationBox.textContent = "output = ReLU(score) = max(0, score)";
+      note.textContent = "ReLU blocks negative scores and keeps positive scores unchanged. This simple behavior is widely used inside deep models.";
+    }
+  }
+
+  function draw() {
+    const score = parseFloat(scoreSlider.value);
+    const output = activate(score);
+
+    ctx.clearRect(0, 0, width, height);
+    drawAxes();
+    drawCurve();
+    drawSelectedPoint(score, output);
+    updateButtons();
+    updateText(score, output);
+  }
+
+  Object.keys(buttons).forEach(function (name) {
+    buttons[name].addEventListener("click", function () {
+      selectedActivation = name;
+      draw();
+    });
+  });
+
+  scoreSlider.addEventListener("input", draw);
+
+  draw();
+})();
+</script>
+```
+
+This is the first key idea.
+
+The weighted score is the same kind of number.
+
+But different activations pass that number forward in different ways.
+
+So the activation function changes how information flows through the model.
+
+---
+
+## Why not just use non-linear equations?
+
+At this point, a natural question appears:
+
+> If we need curves, why not directly write curved equations?
+
+For example:
+
+```text
+score = x1² + x2²
+```
+
+Or:
+
+```text
+score = sin(x1) + x2²
+```
+
+This can work if we already know the shape of the problem.
+
+If the data follows a circle, squared terms may help.
+
+If the data follows a wave, a sine function may help.
+
+But real problems usually do not tell us the correct equation in advance.
+
+We may not know whether the pattern is circular, layered, repeated, broken into regions, or something more complex.
+
+So instead of manually choosing one big non-linear equation, neural networks use a more flexible method:
+
+```text
+weighted sum → activation → weighted sum → activation → ...
+```
+
+Each weighted sum learns a simple score.
+
+Each activation bends the score.
+
+Together, they can build more complex shapes from small reusable parts.
+
+That is more flexible than guessing one hand-written equation upfront.
+
+---
+
+## Activation between weighted sums
+
+In the previous chapter, stacking weighted sums still resulted in one straight-line decision.
+
+The missing piece is to place a non-linear operation between those weighted sums.
+
+Without activation:
+
+```text
+score1 = w11x1 + w12x2 + b1
+score2 = w21x1 + w22x2 + b2
+
+final_score = a score1 + d score2 + c
+```
+
+Because everything is still multiplication and addition, the final result can collapse back into one straight-line equation.
+
+With activation:
+
+```text
+score1 = w11x1 + w12x2 + b1
+score2 = w21x1 + w22x2 + b2
+
+h1 = activation(score1)
+h2 = activation(score2)
+
+final_score = a h1 + d h2 + c
+```
+
+Now the final step is no longer combining raw straight-line scores.
+
+It is combining transformed scores.
+
+That is what stops the model from behaving like just one straight line.
+
+---
+
+## How activation helps with XOR
+
+The XOR pattern cannot be solved by one straight line.
+
+The previous chapter showed that.
+
+Now we can use two internal weighted sums, apply activation to each one, and combine the transformed outputs.
+
+For this example, we will use ReLU.
+
+```text
+h1 = ReLU(x1 + x2)
+h2 = ReLU(-x1 - x2)
+
+final_score = h1 + h2 - 2
+```
+
+This is not the only way to build a non-linear boundary.
+
+The goal here is not to find the best model.
+
+The goal is to see what activation changes.
+
+Try the sandbox below.
+
+Switch between **No Activation** and **With ReLU**.
+
+```{=html}
+<div id="xor-activation-sandbox" class="activation-sandbox">
+  <div class="activation-row activation-top-row">
+    <div class="activation-segmented-control" aria-label="XOR model selector">
+      <button id="xor-no-activation-button" type="button">No Activation</button>
+      <button id="xor-relu-button" type="button" class="active">With ReLU</button>
+    </div>
+    <div id="xor-accuracy" class="activation-metric-badge">Accuracy: --</div>
+  </div>
+
+  <canvas id="xor-activation-canvas" width="640" height="440" class="activation-canvas"></canvas>
+
+  <div class="activation-slider-grid">
+    <label>bias: <span id="xor-bias-value"></span>
+      <input id="xor-bias-slider" type="range" min="-6" max="6" step="0.1" value="-2">
+    </label>
+  </div>
+
+  <div id="xor-equation" class="activation-equation-box"></div>
+  <p id="xor-note" class="activation-note"></p>
+</div>
+
+<script>
+(function () {
+  const canvas = document.getElementById("xor-activation-canvas");
+  const ctx = canvas.getContext("2d");
+
+  const noActivationButton = document.getElementById("xor-no-activation-button");
+  const reluButton = document.getElementById("xor-relu-button");
+  const biasSlider = document.getElementById("xor-bias-slider");
+  const biasValue = document.getElementById("xor-bias-value");
+  const accuracy = document.getElementById("xor-accuracy");
+  const equation = document.getElementById("xor-equation");
+  const note = document.getElementById("xor-note");
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const scale = 46;
+  const originX = width / 2;
+  const originY = height / 2;
+
+  let useRelu = true;
+
+  const points = [
+    { x: -2, y: -2, label: 0 },
+    { x: -2, y:  2, label: 1 },
+    { x:  2, y: -2, label: 1 },
+    { x:  2, y:  2, label: 0 }
+  ];
+
+  function relu(x) {
+    return Math.max(0, x);
+  }
+
+  function toCanvasX(x) {
+    return originX + x * scale;
+  }
+
+  function toCanvasY(y) {
+    return originY - y * scale;
+  }
+
+  function internalScores(x, y) {
+    return {
+      score1: x + y,
+      score2: -x - y
+    };
+  }
+
+  function finalScore(x, y, bias) {
+    const scores = internalScores(x, y);
+
+    if (useRelu) {
+      const h1 = relu(scores.score1);
+      const h2 = relu(scores.score2);
+      return h1 + h2 + bias;
+    }
+
+    return scores.score1 + scores.score2 + bias;
+  }
+
+  function predict(x, y, bias) {
+    return finalScore(x, y, bias) >= 0 ? 1 : 0;
+  }
+
+  function drawAxes() {
+    ctx.strokeStyle = "#aaa";
+    ctx.lineWidth = 1;
+
+    ctx.beginPath();
+    ctx.moveTo(0, originY);
+    ctx.lineTo(width, originY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(originX, 0);
+    ctx.lineTo(originX, height);
+    ctx.stroke();
+
+    ctx.fillStyle = "#666";
+    ctx.font = "12px sans-serif";
+
+    for (let i = -6; i <= 6; i++) {
+      const x = toCanvasX(i);
+      const y = toCanvasY(i);
+
+      ctx.fillRect(x, originY - 3, 1, 6);
+      ctx.fillRect(originX - 3, y, 6, 1);
+
+      if (i !== 0) {
+        ctx.fillText(String(i), x - 4, originY + 16);
+        ctx.fillText(String(i), originX + 8, y + 4);
+      }
+    }
+  }
+
+  function drawRegions(bias) {
+    const cell = 8;
+
+    for (let px = 0; px < width; px += cell) {
+      for (let py = 0; py < height; py += cell) {
+        const x = (px - originX) / scale;
+        const y = (originY - py) / scale;
+        const cls = predict(x, y, bias);
+
+        ctx.fillStyle = cls === 1
+          ? "rgba(80, 120, 255, 0.12)"
+          : "rgba(255, 140, 80, 0.12)";
+
+        ctx.fillRect(px, py, cell, cell);
+      }
+    }
+  }
+
+  function drawInternalLines() {
+    ctx.setLineDash([8, 6]);
+    ctx.strokeStyle = "#777";
+    ctx.lineWidth = 1.5;
+
+    drawLine(1, 1, 0);
+    drawLine(-1, -1, 0);
+
+    ctx.setLineDash([]);
+  }
+
+  function drawLine(w1, w2, b) {
+    if (Math.abs(w1) < 0.0001 && Math.abs(w2) < 0.0001) {
+      return;
+    }
+
+    ctx.beginPath();
+
+    if (Math.abs(w2) < 0.0001) {
+      const x = -b / w1;
+      ctx.moveTo(toCanvasX(x), 0);
+      ctx.lineTo(toCanvasX(x), height);
+    } else {
+      const xLeft = -8;
+      const xRight = 8;
+      const yLeft = -(w1 * xLeft + b) / w2;
+      const yRight = -(w1 * xRight + b) / w2;
+      ctx.moveTo(toCanvasX(xLeft), toCanvasY(yLeft));
+      ctx.lineTo(toCanvasX(xRight), toCanvasY(yRight));
+    }
+
+    ctx.stroke();
+  }
+
+  function drawPoints(bias) {
+    points.forEach(function (point) {
+      const predicted = predict(point.x, point.y, bias);
+      const isCorrect = predicted === point.label;
+
+      ctx.beginPath();
+      ctx.arc(toCanvasX(point.x), toCanvasY(point.y), 8, 0, Math.PI * 2);
+      ctx.fillStyle = point.label === 1 ? "#4f6fff" : "#ff8a4f";
+      ctx.fill();
+      ctx.lineWidth = isCorrect ? 2 : 4;
+      ctx.strokeStyle = isCorrect ? "#222" : "#d00000";
+      ctx.stroke();
+
+      ctx.fillStyle = "#111";
+      ctx.font = "12px sans-serif";
+      ctx.fillText("class " + point.label, toCanvasX(point.x) + 10, toCanvasY(point.y) - 10);
+    });
+  }
+
+  function updateAccuracy(bias) {
+    let correct = 0;
+
+    points.forEach(function (point) {
+      if (predict(point.x, point.y, bias) === point.label) {
+        correct += 1;
+      }
+    });
+
+    const pct = Math.round((correct / points.length) * 100);
+    accuracy.textContent = "Accuracy: " + pct + "% (" + correct + "/" + points.length + " correct)";
+  }
+
+  function updateButtons() {
+    noActivationButton.classList.toggle("active", !useRelu);
+    reluButton.classList.toggle("active", useRelu);
+  }
+
+  function updateText(bias) {
+    biasValue.textContent = bias.toFixed(1);
+
+    if (useRelu) {
+      equation.textContent = "h1 = ReLU(x1 + x2), h2 = ReLU(-x1 - x2), final_score = h1 + h2 + " + bias.toFixed(1);
+      note.textContent = "With ReLU, the internal scores are transformed before they are combined. The decision region is no longer forced to behave like one straight line.";
+    } else {
+      equation.textContent = "final_score = (x1 + x2) + (-x1 - x2) + " + bias.toFixed(1);
+      note.textContent = "Without activation, the internal scores cancel into a simple constant here. More generally, stacked weighted sums still collapse into one linear calculation.";
+    }
+  }
+
+  function draw() {
+    const bias = parseFloat(biasSlider.value);
+
+    ctx.clearRect(0, 0, width, height);
+    drawRegions(bias);
+    drawAxes();
+    drawInternalLines();
+    drawPoints(bias);
+
+    updateAccuracy(bias);
+    updateButtons();
+    updateText(bias);
+  }
+
+  noActivationButton.addEventListener("click", function () {
+    useRelu = false;
+    draw();
+  });
+
+  reluButton.addEventListener("click", function () {
+    useRelu = true;
+    draw();
+  });
+
+  biasSlider.addEventListener("input", draw);
+
+  draw();
+})();
+</script>
+```
+
+The dashed lines show the internal weighted sums.
+
+When there is no activation, those internal calculations do not create a useful non-linear shape.
+
+When ReLU is added, each internal score is transformed before the final step combines them.
+
+That transformation is the key.
+
+The activation function does not magically solve every problem.
+
+But it gives the model a new ability:
+
+```text
+combine transformed scores instead of only combining raw straight-line scores
+```
+
+That is what allows deeper models to become useful.
+
+---
+
+## Different activations behave differently
+
+Not all activations do the same thing.
+
+They all add non-linearity, but they shape the score differently.
+
+Let us compare two important ones:
+
+```text
+Sigmoid
+ReLU
+```
+
+### Sigmoid squeezes
+
+Sigmoid takes any score and squeezes it between 0 and 1.
+
+```text
+very negative score → close to 0
+score near 0        → close to 0.5
+very positive score → close to 1
+```
+
+This is useful when the final output should behave like a probability.
+
+For example:
+
+```text
+0.91 → likely class 1
+0.12 → likely class 0
+```
+
+But sigmoid can become weak inside many layers.
+
+When the score is already very positive or very negative, the output barely changes.
+
+```text
+Sigmoid(8) ≈ 0.9997
+Sigmoid(9) ≈ 0.9999
+```
+
+Both values are almost the same.
+
+So large scores get squeezed into a tiny output range.
+
+That can make learning slower inside deep models.
+
+### ReLU filters
+
+ReLU behaves differently.
+
+```text
+ReLU(score) = max(0, score)
+```
+
+So:
+
+```text
+negative score → 0
+positive score → same value
+```
+
+ReLU does not squeeze positive scores into a small range.
+
+A strong positive score stays strong.
+
+That makes ReLU useful inside hidden layers.
+
+But ReLU also has a weakness.
+
+If the score is negative, the output becomes exactly zero.
+
+If some part of the model keeps producing negative scores, it may stop contributing.
+
+That is why variants like Leaky ReLU exist.
+
+---
+
+## Sigmoid vs ReLU on the same scores
+
+Use the table below to compare the same input scores.
+
+```{python}
+import math
+import pandas as pd
+
+def sigmoid(x):
+    """Return the sigmoid activation value."""
+    return 1 / (1 + math.exp(-x))
+
+def relu(x):
+    """Return the ReLU activation value."""
+    return max(0, x)
+
+scores = [-3, -2, -1, 0, 1, 2, 3]
+
+comparison = pd.DataFrame({
+    "score": scores,
+    "sigmoid(score)": [round(sigmoid(x), 3) for x in scores],
+    "relu(score)": [relu(x) for x in scores],
+})
+
+comparison
+```
+
+The table shows the difference clearly.
+
+Sigmoid compresses all values into a small range between 0 and 1.
+
+ReLU removes negative values and keeps positive values open.
+
+That difference affects where each activation is useful.
+
+---
+
+## A practical view of common activation functions
+
+We do not need to memorize every activation function now.
+
+For this chapter, focus on the behavior.
+
+| Activation | Main behavior                                | Common use                                        |
+| ---------- | -------------------------------------------- | ------------------------------------------------- |
+| Step       | Hard yes/no jump                             | Historical explanation, simple decision intuition |
+| Sigmoid    | Squeezes values between 0 and 1              | Binary output                                     |
+| Tanh       | Squeezes values between -1 and 1             | Centered signals, older networks                  |
+| ReLU       | Keeps positive values, zeros negative values | Hidden layers in many deep models                 |
+| Softmax    | Converts multiple scores into probabilities  | Multi-class output                                |
+
+The most important one for now is ReLU.
+
+It is simple.
+
+It adds non-linearity.
+
+It allows positive signals to keep their strength.
+
+That combination made it very useful in deep learning.
+
+---
+
+## Where different activations are used
+
+A useful rule of thumb:
+
+```text
+Use sigmoid when the final answer is a binary probability-like output.
+
+Use softmax when the final answer must choose one class from many classes.
+
+Use ReLU-like activations inside hidden layers.
+```
+
+For example:
+
+```text
+Binary classification:
+final output → sigmoid
+
+Multi-class classification:
+final output → softmax
+
+Internal layers:
+hidden outputs → ReLU or a ReLU-like activation
+```
+
+This is not a universal law.
+
+But it is a good beginner mental model.
+
+The activation should match the role of that step.
+
+---
+
+## Main takeaway
+
+A weighted sum creates a score.
+
+An activation function changes that score before the next calculation step.
+
+That change matters because it adds non-linearity.
+
+Without activation:
+
+```text
+weighted sum → weighted sum → weighted sum
+```
+
+the model still behaves like a linear calculation.
+
+With activation:
+
+```text
+weighted sum → activation → weighted sum → activation
+```
+
+the model can build more flexible patterns.
+
+Different activation functions change scores differently.
+
+So activation functions are not just mathematical decoration.
+
+They decide how scores become useful signals.
+
+That is why deep learning depends on them.
+
+---
+
+## Chapter summary
+
+```text
+An activation function transforms a weighted score.
+
+output = activation(score)
+
+This non-linear transformation prevents stacked weighted sums from behaving like one straight-line calculation.
+
+Sigmoid squeezes values between 0 and 1.
+
+ReLU blocks negative values and keeps positive values unchanged.
+
+Softmax is usually used when choosing one class from many classes.
+
+The key idea:
+activation functions let models combine transformed signals, not just raw linear scores.
+```
+
+Next chapter:
+
+```text
+Why Layers Are Needed
+```
