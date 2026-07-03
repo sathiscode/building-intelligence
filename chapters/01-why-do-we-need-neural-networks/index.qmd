@@ -1,0 +1,964 @@
+---
+title: "Why One Weighted Sum Is Limited"
+description: "Understanding how a linear equation becomes a learned decision boundary, and why one boundary is not enough."
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    code-summary: "Show code"
+jupyter: python3
+---
+
+Deep learning can look complicated from the outside.
+
+There are layers, gradients, optimizers, GPUs, transformers, and many other moving parts.
+
+But the starting point is much simpler.
+
+Before asking why we need deep networks, I want to start with a smaller question:
+
+> How does a simple linear equation become a learned decision?
+
+A linear equation can represent a straight line. If that line separates the data, it can act as a simple classifier.
+
+But if the pattern cannot be separated by one line, the model reaches its limit.
+
+That limitation is the first reason we need neural networks.
+
+---
+
+## From drawing a line to learning a line
+
+In school math, we are usually given an equation and asked to draw the line.
+
+For example:
+
+```text
+y = 2x + 1
+```
+
+The equation is already known.
+
+The slope is known.
+
+The intercept is known.
+
+The task is to calculate points or draw the line.
+
+Machine learning starts from the opposite direction.
+
+We are not given the equation.
+
+We are given examples.
+
+```text
+input → correct output
+```
+
+The task is to find an equation that explains those examples well.
+
+So instead of starting with a fixed equation like this:
+
+```text
+y = 2x + 1
+```
+
+we start with a more general form:
+
+```text
+score = w1x1 + w2x2 + b
+```
+
+Here, `w1`, `w2`, and `b` are not fixed.
+
+They are parameters.
+
+Learning means adjusting these parameters until the line separates the data as well as possible.
+
+So the shift is:
+
+```text
+School math:
+given equation → draw the line
+
+Machine learning:
+given data → learn the equation
+```
+
+This is the first bridge from mathematics to machine learning.
+
+---
+
+## From data to a learned equation
+
+Let us make this concrete.
+
+Suppose we have a few labeled points.
+
+Each point has two input values:
+
+```text
+x1 = first input value
+x2 = second input value
+```
+
+In machine learning, these input values are called **features**.
+
+A feature is one piece of information the model uses to make a prediction. In table-like data, a feature is usually a column.
+
+For example, if we are predicting whether a house is expensive, `area` and `number_of_rooms` could be features.
+
+For this chapter, we will use simple points with two features: `x1` and `x2`.
+
+The model has to learn values for:
+
+```text
+w1, w2, b
+```
+
+A very simple way to understand learning is this:
+
+```text
+try many possible lines
+measure how many points each line gets right
+keep the line that performs best
+```
+
+That is not how large models are trained in practice, but it is enough to understand the idea of learning parameters from data.
+
+```{python}
+from itertools import product
+
+points = [
+    (-3, -2, 0),
+    (-2, -1, 0),
+    (-1, -2, 0),
+    (1, 2, 1),
+    (2, 1, 1),
+    (3, 2, 1),
+]
+
+
+def score(x1, x2, w1, w2, b):
+    """Return the weighted sum for two input values."""
+    return w1 * x1 + w2 * x2 + b
+
+
+def predict(x1, x2, w1, w2, b):
+    """Classify a point using a linear score."""
+    return 1 if score(x1, x2, w1, w2, b) >= 0 else 0
+
+
+def accuracy(points, w1, w2, b):
+    """Return the fraction of points classified correctly."""
+    correct = 0
+
+    for x1, x2, label in points:
+        if predict(x1, x2, w1, w2, b) == label:
+            correct += 1
+
+    return correct / len(points)
+
+
+candidates = []
+
+for w1, w2, b in product([-2, -1, 0, 1, 2], repeat=3):
+    candidates.append({
+        "w1": w1,
+        "w2": w2,
+        "b": b,
+        "accuracy": accuracy(points, w1, w2, b),
+    })
+
+best = sorted(candidates, key=lambda item: item["accuracy"], reverse=True)[:5]
+best
+```
+
+This small example shows the core shift.
+
+We did not start with the equation.
+
+We started with data and searched for parameters that worked well.
+
+In real machine learning, the search is done more efficiently. But the goal is the same:
+
+```text
+find parameters that make better predictions
+```
+
+---
+
+## The learned equation becomes a decision
+
+A weighted sum gives the model a score:
+
+```text
+score = w1x1 + w2x2 + b
+```
+
+Each part has a role:
+
+```text
+x1, x2  → features, or input values
+w1, w2  → weights, controlling how much each feature matters
+b       → bias, shifting the decision
+score   → raw output of the model
+```
+
+The model turns the score into a prediction by checking whether it is above or below zero:
+
+```text
+if score >= 0:
+    predict class 1
+else:
+    predict class 0
+```
+
+For example, consider this point:
+
+```text
+x1 = 2
+x2 = 3
+```
+
+And this model:
+
+```text
+score = 1.0x1 - 1.0x2 + 0
+```
+
+Now substitute the values:
+
+```text
+score = (1.0 × 2) - (1.0 × 3) + 0
+score = 2 - 3
+score = -1
+```
+
+The model then applies a simple rule:
+
+```text
+if score >= 0 → predict class 1
+if score < 0  → predict class 0
+```
+
+Here, the score is `-1`.
+
+Since `-1` is below zero, the prediction is:
+
+```text
+class 0
+```
+
+In code:
+
+```{python}
+point = (2, 3)
+
+score_value = score(
+    x1=point[0],
+    x2=point[1],
+    w1=1.0,
+    w2=-1.0,
+    b=0.0
+)
+
+prediction_value = predict(
+    x1=point[0],
+    x2=point[1],
+    w1=1.0,
+    w2=-1.0,
+    b=0.0
+)
+
+print("score:", score_value)
+print("prediction:", prediction_value)
+```
+
+---
+
+## One weighted sum creates one line
+
+The decision changes when the score crosses zero:
+
+```text
+w1x1 + w2x2 + b = 0
+```
+
+In two dimensions, this equation is a straight line.
+
+That line is the decision boundary.
+
+Points on one side are predicted as class `1`.
+
+Points on the other side are predicted as class `0`.
+
+Try moving the line below.
+
+Start with the linearly separable dataset. Then switch to the XOR pattern.
+
+The goal is to feel the limitation: no matter how the line moves, it remains one straight boundary.
+
+```{=html}
+<div id="linear-decision-sandbox" class="ml-sandbox">
+  <div class="sandbox-row sandbox-top-row">
+    <div class="segmented-control" aria-label="Dataset selector">
+      <button id="linear-dataset-button" type="button" class="active">Linearly Separable</button>
+      <button id="xor-dataset-button" type="button">XOR Pattern</button>
+    </div>
+    <div id="linear-accuracy" class="metric-badge">Accuracy: --</div>
+  </div>
+
+  <canvas id="linear-canvas" width="640" height="440" class="sandbox-canvas"></canvas>
+
+  <div class="slider-grid">
+    <label>w1: <span id="linear-w1-value"></span><input id="linear-w1-slider" type="range" min="-5" max="5" step="0.1" value="1"></label>
+    <label>w2: <span id="linear-w2-value"></span><input id="linear-w2-slider" type="range" min="-5" max="5" step="0.1" value="1"></label>
+    <label>b: <span id="linear-b-value"></span><input id="linear-b-slider" type="range" min="-8" max="8" step="0.1" value="0"></label>
+  </div>
+
+  <div id="linear-equation" class="equation-box"></div>
+  <p id="linear-note" class="sandbox-note"></p>
+</div>
+
+<style>
+.ml-sandbox {
+  max-width: 780px;
+  margin: 1.5rem 0;
+  padding: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.sandbox-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.sandbox-top-row {
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.segmented-control {
+  display: inline-flex;
+  border: 1px solid #aaa;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.segmented-control button {
+  padding: 0.5rem 0.9rem;
+  border: 0;
+  background: #fff;
+  color: #222;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.segmented-control button.active {
+  background: #222;
+  color: #fff;
+}
+
+.metric-badge {
+  font-weight: 700;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  background: #f3f3f3;
+}
+
+.sandbox-canvas {
+  width: 100%;
+  max-width: 640px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  display: block;
+  background: #fff;
+}
+
+.slider-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.9rem;
+}
+
+.slider-grid label {
+  font-size: 0.95rem;
+}
+
+.slider-grid input {
+  width: 100%;
+}
+
+.equation-box {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border-radius: 10px;
+  background: #f7f7f7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-x: auto;
+}
+
+.sandbox-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.95rem;
+}
+</style>
+
+<script>
+(function () {
+  const canvas = document.getElementById("linear-canvas");
+  const ctx = canvas.getContext("2d");
+
+  const w1Slider = document.getElementById("linear-w1-slider");
+  const w2Slider = document.getElementById("linear-w2-slider");
+  const bSlider = document.getElementById("linear-b-slider");
+
+  const w1Value = document.getElementById("linear-w1-value");
+  const w2Value = document.getElementById("linear-w2-value");
+  const bValue = document.getElementById("linear-b-value");
+
+  const equation = document.getElementById("linear-equation");
+  const accuracy = document.getElementById("linear-accuracy");
+  const note = document.getElementById("linear-note");
+
+  const linearButton = document.getElementById("linear-dataset-button");
+  const xorButton = document.getElementById("xor-dataset-button");
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const scale = 46;
+  const originX = width / 2;
+  const originY = height / 2;
+
+  const linearPoints = [
+    { x: -3, y: -2, label: 0 },
+    { x: -2, y: -1, label: 0 },
+    { x: -1, y: -2, label: 0 },
+    { x:  1, y:  2, label: 1 },
+    { x:  2, y:  1, label: 1 },
+    { x:  3, y:  2, label: 1 }
+  ];
+
+  const xorPoints = [
+    { x: -2, y: -2, label: 0 },
+    { x: -2, y:  2, label: 1 },
+    { x:  2, y: -2, label: 1 },
+    { x:  2, y:  2, label: 0 }
+  ];
+
+  let datasetName = "linear";
+  let currentPoints = linearPoints;
+
+  function toCanvasX(x) {
+    return originX + x * scale;
+  }
+
+  function toCanvasY(y) {
+    return originY - y * scale;
+  }
+
+  function modelScore(point, w1, w2, b) {
+    return w1 * point.x + w2 * point.y + b;
+  }
+
+  function prediction(point, w1, w2, b) {
+    return modelScore(point, w1, w2, b) >= 0 ? 1 : 0;
+  }
+
+  function drawDecisionRegions(w1, w2, b) {
+    const cell = 8;
+
+    for (let px = 0; px < width; px += cell) {
+      for (let py = 0; py < height; py += cell) {
+        const x = (px - originX) / scale;
+        const y = (originY - py) / scale;
+        const cls = w1 * x + w2 * y + b >= 0 ? 1 : 0;
+
+        ctx.fillStyle = cls === 1
+          ? "rgba(80, 120, 255, 0.12)"
+          : "rgba(255, 140, 80, 0.12)";
+
+        ctx.fillRect(px, py, cell, cell);
+      }
+    }
+  }
+
+  function drawAxes() {
+    ctx.strokeStyle = "#aaa";
+    ctx.lineWidth = 1;
+
+    ctx.beginPath();
+    ctx.moveTo(0, originY);
+    ctx.lineTo(width, originY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(originX, 0);
+    ctx.lineTo(originX, height);
+    ctx.stroke();
+
+    ctx.fillStyle = "#666";
+    ctx.font = "12px sans-serif";
+
+    for (let i = -6; i <= 6; i++) {
+      const x = toCanvasX(i);
+      const y = toCanvasY(i);
+
+      ctx.fillRect(x, originY - 3, 1, 6);
+      ctx.fillRect(originX - 3, y, 6, 1);
+
+      if (i !== 0) {
+        ctx.fillText(String(i), x - 4, originY + 16);
+        ctx.fillText(String(i), originX + 8, y + 4);
+      }
+    }
+  }
+
+  function drawBoundary(w1, w2, b, color, widthPx) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = widthPx;
+    ctx.beginPath();
+
+    if (Math.abs(w1) < 0.0001 && Math.abs(w2) < 0.0001) {
+      return;
+    }
+
+    if (Math.abs(w2) < 0.0001) {
+      const x = -b / w1;
+      ctx.moveTo(toCanvasX(x), 0);
+      ctx.lineTo(toCanvasX(x), height);
+    } else {
+      const xLeft = -8;
+      const xRight = 8;
+      const yLeft = -(w1 * xLeft + b) / w2;
+      const yRight = -(w1 * xRight + b) / w2;
+      ctx.moveTo(toCanvasX(xLeft), toCanvasY(yLeft));
+      ctx.lineTo(toCanvasX(xRight), toCanvasY(yRight));
+    }
+
+    ctx.stroke();
+  }
+
+  function drawPoints(w1, w2, b) {
+    currentPoints.forEach(function (point) {
+      const predicted = prediction(point, w1, w2, b);
+      const isCorrect = predicted === point.label;
+
+      ctx.beginPath();
+      ctx.arc(toCanvasX(point.x), toCanvasY(point.y), 8, 0, Math.PI * 2);
+      ctx.fillStyle = point.label === 1 ? "#4f6fff" : "#ff8a4f";
+      ctx.fill();
+      ctx.lineWidth = isCorrect ? 2 : 4;
+      ctx.strokeStyle = isCorrect ? "#222" : "#d00000";
+      ctx.stroke();
+
+      ctx.fillStyle = "#111";
+      ctx.font = "12px sans-serif";
+      ctx.fillText("class " + point.label, toCanvasX(point.x) + 10, toCanvasY(point.y) - 10);
+    });
+  }
+
+  function updateButtons() {
+    linearButton.classList.toggle("active", datasetName === "linear");
+    xorButton.classList.toggle("active", datasetName === "xor");
+  }
+
+  function updateAccuracy(w1, w2, b) {
+    let correct = 0;
+
+    currentPoints.forEach(function (point) {
+      if (prediction(point, w1, w2, b) === point.label) {
+        correct += 1;
+      }
+    });
+
+    const pct = Math.round((correct / currentPoints.length) * 100);
+    accuracy.textContent = "Accuracy: " + pct + "% (" + correct + "/" + currentPoints.length + " correct)";
+
+    if (datasetName === "xor") {
+      note.textContent = "The XOR pattern cannot be solved by one straight line. Move the sliders and notice that the boundary never bends.";
+    } else {
+      note.textContent = "This dataset can be separated by one line. Adjust the parameters until all points are classified correctly.";
+    }
+  }
+
+  function draw() {
+    const w1 = parseFloat(w1Slider.value);
+    const w2 = parseFloat(w2Slider.value);
+    const b = parseFloat(bSlider.value);
+
+    w1Value.textContent = w1.toFixed(1);
+    w2Value.textContent = w2.toFixed(1);
+    bValue.textContent = b.toFixed(1);
+
+    ctx.clearRect(0, 0, width, height);
+    drawDecisionRegions(w1, w2, b);
+    drawAxes();
+    drawBoundary(w1, w2, b, "#222", 2.5);
+    drawPoints(w1, w2, b);
+    updateAccuracy(w1, w2, b);
+    updateButtons();
+
+    equation.textContent = "score = " + w1.toFixed(1) + "x1 + " + w2.toFixed(1) + "x2 + " + b.toFixed(1);
+  }
+
+  linearButton.addEventListener("click", function () {
+    datasetName = "linear";
+    currentPoints = linearPoints;
+    draw();
+  });
+
+  xorButton.addEventListener("click", function () {
+    datasetName = "xor";
+    currentPoints = xorPoints;
+    draw();
+  });
+
+  [w1Slider, w2Slider, bSlider].forEach(function (slider) {
+    slider.addEventListener("input", draw);
+  });
+
+  draw();
+})();
+</script>
+```
+
+This shows two things at once.
+
+First, one line can solve some problems.
+
+Second, some patterns cannot be separated by one line.
+
+The XOR pattern makes that failure visible.
+
+This pattern is called XOR, short for **exclusive OR**.
+
+One way to read the four points is:
+
+```text
+both inputs negative → class 0
+both inputs positive → class 0
+one negative and one positive → class 1
+```
+
+In programming terms, the output is `1` only when the two input conditions are different.
+
+That is why this tiny dataset is useful. It exposes the limitation of one straight decision boundary.
+
+---
+
+## Why stacking weighted sums still gives one line
+
+A natural next idea is to use more than one weighted sum.
+
+For example:
+
+```text
+score1 = w11x1 + w12x2 + b1
+score2 = w21x1 + w22x2 + b2
+```
+
+Then combine them:
+
+```text
+final_score = a score1 + b score2 + c
+```
+
+At first, this feels like it should create a richer model.
+
+But every step is still only multiplying, adding, and shifting.
+
+So the final result can still be simplified back into one weighted sum of the original inputs:
+
+```text
+final_score = Ax1 + Bx2 + C
+```
+
+That means the final decision boundary is still a straight line.
+
+Expand the equations:
+
+```text
+final_score = a(w11x1 + w12x2 + b1) + b(w21x1 + w22x2 + b2) + c
+
+final_score = (a w11 + b w21)x1 + (a w12 + b w22)x2 + (a b1 + b b2 + c)
+```
+
+So stacking weighted sums alone does not solve the problem.
+
+Try it below. There are two internal weighted sums and one final combination. You can move every parameter, but the final decision boundary is still one straight line.
+
+```{=html}
+<div id="stacked-linear-sandbox" class="ml-sandbox">
+  <div class="sandbox-row sandbox-top-row">
+    <div class="metric-badge">Stacked weighted sums</div>
+    <div id="stacked-accuracy" class="metric-badge">Accuracy: --</div>
+  </div>
+
+  <canvas id="stacked-canvas" width="640" height="440" class="sandbox-canvas"></canvas>
+
+  <div class="slider-grid">
+    <label>w11: <span id="w11-value"></span><input id="w11-slider" type="range" min="-4" max="4" step="0.1" value="1"></label>
+    <label>w12: <span id="w12-value"></span><input id="w12-slider" type="range" min="-4" max="4" step="0.1" value="0.5"></label>
+    <label>b1: <span id="b1-value"></span><input id="b1-slider" type="range" min="-6" max="6" step="0.1" value="0"></label>
+
+    <label>w21: <span id="w21-value"></span><input id="w21-slider" type="range" min="-4" max="4" step="0.1" value="-0.5"></label>
+    <label>w22: <span id="w22-value"></span><input id="w22-slider" type="range" min="-4" max="4" step="0.1" value="1"></label>
+    <label>b2: <span id="b2-value"></span><input id="b2-slider" type="range" min="-6" max="6" step="0.1" value="0"></label>
+
+    <label>a: <span id="a-value"></span><input id="a-slider" type="range" min="-4" max="4" step="0.1" value="1"></label>
+    <label>d: <span id="d-value"></span><input id="d-slider" type="range" min="-4" max="4" step="0.1" value="1"></label>
+    <label>c: <span id="c-value"></span><input id="c-slider" type="range" min="-6" max="6" step="0.1" value="0"></label>
+  </div>
+
+  <div id="stacked-equation" class="equation-box"></div>
+  <p class="sandbox-note">Dashed lines show the two internal scores. The solid line shows the final collapsed decision boundary.</p>
+</div>
+
+<script>
+(function () {
+  const canvas = document.getElementById("stacked-canvas");
+  const ctx = canvas.getContext("2d");
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const scale = 46;
+  const originX = width / 2;
+  const originY = height / 2;
+
+  const points = [
+    { x: -2, y: -2, label: 0 },
+    { x: -2, y:  2, label: 1 },
+    { x:  2, y: -2, label: 1 },
+    { x:  2, y:  2, label: 0 }
+  ];
+
+  const names = ["w11", "w12", "b1", "w21", "w22", "b2", "a", "d", "c"];
+  const controls = {};
+
+  names.forEach(function (name) {
+    controls[name] = {
+      slider: document.getElementById(name + "-slider"),
+      value: document.getElementById(name + "-value")
+    };
+  });
+
+  const accuracy = document.getElementById("stacked-accuracy");
+  const equation = document.getElementById("stacked-equation");
+
+  function get(name) {
+    return parseFloat(controls[name].slider.value);
+  }
+
+  function toCanvasX(x) {
+    return originX + x * scale;
+  }
+
+  function toCanvasY(y) {
+    return originY - y * scale;
+  }
+
+  function drawAxes() {
+    ctx.strokeStyle = "#aaa";
+    ctx.lineWidth = 1;
+
+    ctx.beginPath();
+    ctx.moveTo(0, originY);
+    ctx.lineTo(width, originY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(originX, 0);
+    ctx.lineTo(originX, height);
+    ctx.stroke();
+  }
+
+  function drawLine(w1, w2, b, color, widthPx, dashed) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = widthPx;
+    ctx.setLineDash(dashed ? [8, 6] : []);
+    ctx.beginPath();
+
+    if (Math.abs(w1) < 0.0001 && Math.abs(w2) < 0.0001) {
+      ctx.setLineDash([]);
+      return;
+    }
+
+    if (Math.abs(w2) < 0.0001) {
+      const x = -b / w1;
+      ctx.moveTo(toCanvasX(x), 0);
+      ctx.lineTo(toCanvasX(x), height);
+    } else {
+      const xLeft = -8;
+      const xRight = 8;
+      const yLeft = -(w1 * xLeft + b) / w2;
+      const yRight = -(w1 * xRight + b) / w2;
+      ctx.moveTo(toCanvasX(xLeft), toCanvasY(yLeft));
+      ctx.lineTo(toCanvasX(xRight), toCanvasY(yRight));
+    }
+
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawDecisionRegions(A, B, C) {
+    const cell = 8;
+
+    for (let px = 0; px < width; px += cell) {
+      for (let py = 0; py < height; py += cell) {
+        const x = (px - originX) / scale;
+        const y = (originY - py) / scale;
+        const cls = A * x + B * y + C >= 0 ? 1 : 0;
+
+        ctx.fillStyle = cls === 1
+          ? "rgba(80, 120, 255, 0.12)"
+          : "rgba(255, 140, 80, 0.12)";
+
+        ctx.fillRect(px, py, cell, cell);
+      }
+    }
+  }
+
+  function drawPoints(A, B, C) {
+    points.forEach(function (point) {
+      const predicted = A * point.x + B * point.y + C >= 0 ? 1 : 0;
+      const isCorrect = predicted === point.label;
+
+      ctx.beginPath();
+      ctx.arc(toCanvasX(point.x), toCanvasY(point.y), 8, 0, Math.PI * 2);
+      ctx.fillStyle = point.label === 1 ? "#4f6fff" : "#ff8a4f";
+      ctx.fill();
+      ctx.lineWidth = isCorrect ? 2 : 4;
+      ctx.strokeStyle = isCorrect ? "#222" : "#d00000";
+      ctx.stroke();
+
+      ctx.fillStyle = "#111";
+      ctx.font = "12px sans-serif";
+      ctx.fillText("class " + point.label, toCanvasX(point.x) + 10, toCanvasY(point.y) - 10);
+    });
+  }
+
+  function updateAccuracy(A, B, C) {
+    let correct = 0;
+
+    points.forEach(function (point) {
+      const predicted = A * point.x + B * point.y + C >= 0 ? 1 : 0;
+      if (predicted === point.label) {
+        correct += 1;
+      }
+    });
+
+    const pct = Math.round((correct / points.length) * 100);
+    accuracy.textContent = "Accuracy: " + pct + "% (" + correct + "/" + points.length + " correct)";
+  }
+
+  function draw() {
+    const w11 = get("w11");
+    const w12 = get("w12");
+    const b1 = get("b1");
+    const w21 = get("w21");
+    const w22 = get("w22");
+    const b2 = get("b2");
+    const a = get("a");
+    const d = get("d");
+    const c = get("c");
+
+    names.forEach(function (name) {
+      controls[name].value.textContent = get(name).toFixed(1);
+    });
+
+    const A = a * w11 + d * w21;
+    const B = a * w12 + d * w22;
+    const C = a * b1 + d * b2 + c;
+
+    ctx.clearRect(0, 0, width, height);
+    drawDecisionRegions(A, B, C);
+    drawAxes();
+
+    drawLine(w11, w12, b1, "#777", 1.5, true);
+    drawLine(w21, w22, b2, "#999", 1.5, true);
+    drawLine(A, B, C, "#222", 3, false);
+
+    drawPoints(A, B, C);
+    updateAccuracy(A, B, C);
+
+    equation.textContent =
+      "final_score = " + A.toFixed(2) + "x1 + " + B.toFixed(2) + "x2 + " + C.toFixed(2) +
+      "   where A = a·w11 + d·w21, B = a·w12 + d·w22, C = a·b1 + d·b2 + c";
+  }
+
+  names.forEach(function (name) {
+    controls[name].slider.addEventListener("input", draw);
+  });
+
+  draw();
+})();
+</script>
+```
+
+Even with two internal weighted sums, the final boundary still does not bend.
+
+It can rotate.
+
+It can shift.
+
+But it remains one straight line.
+
+So stacking weighted sums alone is not enough.
+
+---
+
+## What this leaves open
+
+A weighted sum is useful because it gives a model a simple learned decision.
+
+But in two dimensions, one weighted sum creates one straight decision boundary.
+
+The XOR example shows the problem clearly: some patterns cannot be separated by one line.
+
+Stacking more weighted sums does not solve the problem by itself. If the operations are still only multiplication, addition, and shifting, the final result is still another straight-line decision.
+
+So the next question is:
+
+> What extra operation would stop stacked weighted sums from collapsing into one straight-line decision?
+
+That is the next idea to explore.
+
+---
+
+## Chapter summary
+
+```text
+School math:
+given equation → draw the line
+
+Machine learning:
+given data → learn the equation
+
+A weighted sum is the simplest learned decision:
+
+score = w1x1 + w2x2 + b
+
+In two dimensions, this creates one straight decision boundary.
+
+That works for linearly separable data.
+
+It fails for patterns like XOR.
+
+Stacking weighted sums still creates only a straight-line decision.
+
+So the next missing idea is the operation that prevents this collapse.
+```
+
+Next chapter:
+
+```text
+Why Activation Is Needed
+```
